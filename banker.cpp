@@ -53,40 +53,57 @@ int main(int argc, char const *argv[])
 		exit(EXIT_FAILURE);
 	}
 
+	// the log file which store all the details (snapshot)
 	out_fp = fopen("log.txt", "w");
+	// shuffle the random function
 	srand(time(NULL));
+	// initialization
 	initialize(argv);
+	// print snapshot to stdout and log file
 	fprint_snapshot(stdout);
 	fprint_snapshot(out_fp);
 
+	// open the threads to imitate the processes in OS
 	std::vector<std::thread> threads;
 	for (int i = 0; i < NUM_CST; ++i) {
 		threads.emplace_back(process_create, i);
 	}
+	// wait until all threads has done
 	for (std::thread& th : threads) {
 		th.join();
 	}
 
-	printf(WHITE "All processes finished their jobs, you can refer to log.txt to see all the details\n" NONE);
+	// message about log file
+	printf(WHITE "All processes finished their jobs, you can refer to log.txt to see all the details.\n" NONE);
+	printf(WHITE "Use 'python3 reader.py | less -r' to get colorful view.\n" NONE);
+	printf(WHITE "Or 'python3 trans_to_no_color.py' to get colorless log file.\n" NONE);
 	return 0;
 }
 
 void process_create(int customer_id) {
+	// run until the job has done (when allocation == max)
 	while (1) {
+		// random sleep for 0~9 milliseconds
 		std::this_thread::sleep_for(std::chrono::milliseconds(rand()%10));
-		if (rand()%2) {
+
+		// originally there's a 1/2 chance to request, 1/2 chance to release
+		// but since we don't need to do random release anymore, the code below 'else' is abandoned.
+		// if (rand()%2) {
 			int request[NUM_RSRC];
 			int sum = 0;
+			// randomly generate a reasonable request 
 			for (int i = 0; i < NUM_RSRC; ++i) {
 				request[i] = rand() % (need[customer_id][i]+1);
 				sum += request[i];
 			}
 			if (sum == 0) continue;
+			// request for resources
 			while (request_resources(customer_id, request) != 0) {
 				// if request fail, repeat the same requesting
-				std::this_thread::sleep_for(std::chrono::milliseconds(25));
+				std::this_thread::sleep_for(std::chrono::milliseconds(20));
 			}
 			
+			// to see if we can make the job done (need == 0 for all resources)
 			bool enough = true;
 			for (int i = 0; i < NUM_RSRC; ++i) {
 				if (need[customer_id][i] > 0) {
@@ -94,14 +111,14 @@ void process_create(int customer_id) {
 					break;
 				}
 			}
+			// if we can, release all resources
 			if (enough) {
 				printf(LIGHT_GREEN "--[V]-- Process %d has finished !!!\n" NONE, customer_id);
 				release_all(customer_id);
 				return;
 			}
-		} 
-		// since we don't need to do random release anymore, the code below is abandoned.
-		else {
+		// } 
+		// else {
 			// int release[NUM_RSRC];
 			// int sum = 0;
 			// for (int i = 0; i < NUM_RSRC; ++i) {
@@ -109,9 +126,11 @@ void process_create(int customer_id) {
 			// 	sum += release[i];
 			// }
 			// if (sum > 0) release_resources(customer_id, release);
-		}
+		// }
 	}
 }
+
+// cat the info of request/release with some format
 void catInfo(std::string& info, int customer_id, int arr[], const char* desc) {
 	std::stringstream ss;
 	ss << desc << " of process " << customer_id << " -> (";
@@ -124,6 +143,7 @@ void catInfo(std::string& info, int customer_id, int arr[], const char* desc) {
 }
 
 int request_resources(int customer_id, int request[]) {
+	// get info string about this requesting
 	std::string info;
 	catInfo(info, customer_id, request, "Requesting");
 
@@ -183,12 +203,14 @@ int request_resources(int customer_id, int request[]) {
 	return 0;
 }
 int release_resources(int customer_id, int release[]) {
+	// get info string about this releasing
 	std::string info;
 	catInfo(info, customer_id, release, "Releasing");
 	printf(LIGHT_GREEN "--[+]-- %s\n", info.c_str());
 	fprintf(out_fp, LIGHT_GREEN "--[+]-- %s\n", info.c_str());
 	fprint_snapshot(out_fp);
-	// release the resources 
+	// release the resources
+	// lock is to prevent data race condition
 	mtx.lock();
 	for (int i = 0; i < NUM_RSRC; ++i) {
 		allocation[customer_id][i] -= release[i];
@@ -254,6 +276,7 @@ bool safety_algo(int customer_id, int request[]) {
 }
 void initialize(char const *argv[])
 {
+	// read argument and make initialization
 	for (int i = 0; i < NUM_RSRC; ++i) {
 		total[i] = available[i] = std::stoi(std::string(argv[i+1]), NULL, 10);
 	}
@@ -265,6 +288,7 @@ void initialize(char const *argv[])
 	}
 }
 
+// cat resouces name by A, B, C, ..., Z, a, b, c, ... to target string
 char* putRsrcName(char* target) {
 	for (int i = 0; i < NUM_RSRC; ++i) {
 		target += sprintf(target, "%4c", transChar(i));
@@ -272,8 +296,8 @@ char* putRsrcName(char* target) {
 	target += sprintf(target, "\n");
 	return target;
 }
-char* put_table(const char* descryption, int table[NUM_CST][NUM_RSRC], char* buffer) {
-	char* target = buffer;
+// cat a 2D table to target string, like maximum, allocation, and need table 
+char* put_table(const char* descryption, int table[NUM_CST][NUM_RSRC], char* target) {
 	target += sprintf(target, YELLOW "%s:\n     " NONE, descryption);
 	target = putRsrcName(target);
 	for (int i = 0; i < NUM_CST; ++i) {
@@ -285,8 +309,8 @@ char* put_table(const char* descryption, int table[NUM_CST][NUM_RSRC], char* buf
 	}
 	return target;
 }
-char* put_rescouse(const char* desc, int resources[NUM_RSRC], char* buffer) {
-	char* target = buffer;
+// cat the resouces information to target string
+char* put_rescouse(const char* desc, int resources[NUM_RSRC], char* target) {
 	target += sprintf(target, YELLOW "%s system resources are:\n" NONE, desc);
 	target = putRsrcName(target);
 	for (int i = 0; i < NUM_RSRC; ++i) {
@@ -295,6 +319,7 @@ char* put_rescouse(const char* desc, int resources[NUM_RSRC], char* buffer) {
 	target += sprintf(target, "\n");
 	return target;
 }
+// print the snapshot of system about all information to the file pointer
 void fprint_snapshot(FILE* fp)
 {
 	char buffer[100000];
