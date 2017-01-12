@@ -75,7 +75,7 @@ int main(int argc, char const *argv[])
 
 	// message about log file
 	printf(WHITE "All processes finished their jobs, you can refer to log.txt to see all the details.\n" NONE);
-	printf(WHITE "Use 'python3 reader.py | less -r' to get colorful view.\n" NONE);
+	printf(WHITE "Use 'less log.txt -r' to get colorful view.\n" NONE);
 	printf(WHITE "Or 'python3 trans_to_no_color.py' to get colorless log file.\n" NONE);
 	return 0;
 }
@@ -206,9 +206,8 @@ int release_resources(int customer_id, int release[]) {
 	// get info string about this releasing
 	std::string info;
 	catInfo(info, customer_id, release, "Releasing");
-	printf(LIGHT_GREEN "--[+]-- %s\n", info.c_str());
-	fprintf(out_fp, LIGHT_GREEN "--[+]-- %s\n", info.c_str());
-	fprint_snapshot(out_fp);
+	printf(LIGHT_GREEN "--[+]-- %s\n" NONE, info.c_str());
+	fprintf(out_fp, LIGHT_GREEN "--[+]-- %s\n" NONE, info.c_str());
 	// release the resources
 	// lock is to prevent data race condition
 	mtx.lock();
@@ -217,6 +216,7 @@ int release_resources(int customer_id, int release[]) {
 		need[customer_id][i] += release[i];
 		available[i] += release[i];
 	}
+	fprint_snapshot(out_fp);
 	mtx.unlock();
 	return 0;
 }
