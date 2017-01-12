@@ -9,7 +9,7 @@ make
 
 ### View log file:
 ```
-python3 reader.py | less -r
+less -r log.txt
 ```
 
 ### Transform the log file to colorless:
